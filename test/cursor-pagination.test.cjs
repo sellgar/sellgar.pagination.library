@@ -152,6 +152,7 @@ test(
       );
       assert.equal(queries.filter((sql) => /COUNT\s*\(/i.test(sql)).length, 0);
       assert.ok(queries.some((sql) => /LIMIT 3/.test(sql)));
+      assert.ok(queries.some((sql) => sql.includes(' UNION ALL ')));
     } finally {
       await source.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await source.destroy();

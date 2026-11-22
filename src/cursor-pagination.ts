@@ -31,10 +31,11 @@ export class CursorPagination {
     const token = new CursorToken(context.scope, context.filters, context.order, this.secret);
     const headers = query.clone().select(identity, '__page_id').orderBy().distinct(true);
     context.order.forEach((key, index) => {
-      headers.addSelect(key.expression, `__page_order_${index}`);
+      if (key.expression !== identity) headers.addSelect(key.expression, `__page_order_${index}`);
       headers.addSelect(`CAST(${key.expression} AS text)`, `__page_key_${index}`);
-      headers.addOrderBy(`__page_order_${index}`, key.direction);
+      headers.addOrderBy(key.expression === identity ? '__page_id' : `__page_order_${index}`, key.direction);
     });
+    let roots: SelectQueryBuilder<ObjectLiteral> = headers;
     if (request.nextToken !== undefined) {
       const keys = token.decode(request.nextToken);
       const clauses = context.order.map((key, index) => {
@@ -47,12 +48,32 @@ export class CursorPagination {
         const comparison = `${key.expression} ${key.direction === 'ASC' ? '>' : '<'} CAST(:__page_key_${index} AS ${key.type})`;
         return `(${[...equals, comparison].join(' AND ')})`;
       });
-      headers.andWhere(
-        `(${clauses.join(' OR ')})`,
-        Object.fromEntries(keys.map((key, index) => [`__page_key_${index}`, key])),
+      const parameters = Object.fromEntries(keys.map((key, index) => [`__page_key_${index}`, key]));
+      const branches = clauses.map((clause) =>
+        headers
+          .clone()
+          .andWhere(clause, parameters)
+          .limit(limit + 1),
       );
+      if (branches.length === 1) {
+        roots = branches[0];
+      } else {
+        const union = branches.map((branch) => '(' + branch.getQuery() + ')').join(' UNION ALL ');
+        roots = headers
+          .createQueryBuilder()
+          .select('*')
+          .from('(' + union + ')', '__page_union')
+          .setParameters(headers.getParameters())
+          .setParameters(parameters);
+        context.order.forEach((key, index) =>
+          roots.addOrderBy(
+            key.expression === identity ? '__page_union.__page_id' : `__page_union.__page_order_${index}`,
+            key.direction,
+          ),
+        );
+      }
     }
-    const rows = await headers.limit(limit + 1).getRawMany<Record<string, string>>();
+    const rows = await roots.limit(limit + 1).getRawMany<Record<string, string>>();
     const page = rows.slice(0, limit);
     const ids = page.map((row) => row.__page_id);
     const entities =
