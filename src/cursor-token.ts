@@ -73,7 +73,9 @@ export class CursorToken {
   private validKey(value: unknown, order: CursorOrder): value is string {
     if (typeof value !== 'string' || value.length > 1024) return false;
     if (order.type === 'uuid') return isUUID(value);
-    if (order.type === 'timestamptz') return value.length <= 64 && Number.isFinite(Date.parse(value));
+    if (order.type === 'timestamp' || order.type === 'timestamptz') {
+      return value.length <= 64 && Number.isFinite(Date.parse(value));
+    }
     if (order.type === 'integer') return /^-?\d+$/.test(value);
     if (order.type === 'numeric' || order.type === 'real') {
       return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value) && Number.isFinite(Number(value));
