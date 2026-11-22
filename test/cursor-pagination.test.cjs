@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 const { DataSource, EntitySchema } = require('typeorm');
 const { CursorPagination } = require('../dist');
+const pagination = new CursorPagination('test-pagination-key-at-least-32-bytes');
 
 test(
   'PostgreSQL keysets preserve microseconds, complete JOIN relations and page boundaries without COUNT',
@@ -110,25 +111,25 @@ test(
       let nextToken;
       const seen = [];
       do {
-        const page = await CursorPagination.read(build(), { limit: 2, nextToken }, context);
+        const page = await pagination.read(build(), { limit: 2, nextToken }, context);
         assert.deepEqual(Object.keys(page.meta).sort(), ['limit', 'nextToken']);
         assert.ok(page.data.every((row) => row.children.length === 3));
         seen.push(...page.data.map((row) => row.uuid));
         nextToken = page.meta.nextToken;
       } while (nextToken !== null);
       assert.deepEqual(seen, ids);
-      const exact = await CursorPagination.read(build(), { limit: 5 }, context);
+      const exact = await pagination.read(build(), { limit: 5 }, context);
       assert.equal(exact.meta.nextToken, null);
-      const first = await CursorPagination.read(build(), { limit: 2 }, context);
+      const first = await pagination.read(build(), { limit: 2 }, context);
       await source.query(`DELETE FROM "${schema}".page_parent WHERE uuid=$1`, [ids[1]]);
       await source.query(`INSERT INTO "${schema}".page_parent VALUES ($1,$2,'2027-01-01',1)`, [randomUUID(), group]);
-      const rest = await CursorPagination.read(build(), { limit: 100, nextToken: first.meta.nextToken }, context);
+      const rest = await pagination.read(build(), { limit: 100, nextToken: first.meta.nextToken }, context);
       assert.deepEqual(
         rest.data.map((row) => row.uuid),
         ids.slice(2),
       );
       assert.equal(rest.meta.nextToken, null);
-      const empty = await CursorPagination.read(
+      const empty = await pagination.read(
         build().andWhere('parent.uuid = :missing', { missing: randomUUID() }),
         {},
         { ...context, filters: { missing: true } },
@@ -142,19 +143,11 @@ test(
         scope: 'test.rank',
         order: [{ expression: 'parent.rank', direction: 'DESC', type: 'real' }, context.order[1]],
       };
-      const rankFirst = await CursorPagination.read(build(), { limit: 2 }, ranked);
-      const rankRest = await CursorPagination.read(
-        build(),
-        { limit: 100, nextToken: rankFirst.meta.nextToken },
-        ranked,
-      );
+      const rankFirst = await pagination.read(build(), { limit: 2 }, ranked);
+      const rankRest = await pagination.read(build(), { limit: 100, nextToken: rankFirst.meta.nextToken }, ranked);
       assert.equal(new Set([...rankFirst.data, ...rankRest.data].map((row) => row.uuid)).size, 5);
       await assert.rejects(
-        CursorPagination.read(
-          build(),
-          { nextToken: first.meta.nextToken },
-          { ...context, filters: { group: randomUUID() } },
-        ),
+        pagination.read(build(), { nextToken: first.meta.nextToken }, { ...context, filters: { group: randomUUID() } }),
         (error) => error.getStatus() === 400,
       );
       assert.equal(queries.filter((sql) => /COUNT\s*\(/i.test(sql)).length, 0);

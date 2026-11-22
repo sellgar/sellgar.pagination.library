@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { isUUID } from 'class-validator';
 
 import { CursorOrder } from './cursor-order';
@@ -11,21 +11,35 @@ export class CursorToken {
     scope: string,
     filters: unknown,
     private readonly order: readonly CursorOrder[],
+    private readonly secret: string,
   ) {
+    if (typeof secret !== 'string' || Buffer.byteLength(secret) < 32) {
+      throw new Error('Pagination token secret must contain at least 32 bytes');
+    }
     this.fingerprint = createHash('sha256')
       .update(JSON.stringify([scope, this.canonical(filters), order]))
       .digest('base64url');
   }
 
   encode(keys: string[]): string {
-    return Buffer.from(JSON.stringify([1, this.fingerprint, keys])).toString('base64url');
+    const payload = Buffer.from(JSON.stringify([1, this.fingerprint, keys])).toString('base64url');
+    return payload + '.' + this.sign(payload).toString('base64url');
   }
 
   decode(token: string): string[] {
     try {
-      if (!token || token.length > 8192 || !/^[A-Za-z0-9_-]+$/.test(token)) throw new Error();
-      const bytes = Buffer.from(token, 'base64url');
-      if (bytes.toString('base64url') !== token) throw new Error();
+      if (!token || token.length > 8192 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) throw new Error();
+      const [encoded, signature] = token.split('.');
+      const actual = Buffer.from(signature, 'base64url');
+      const expected = this.sign(encoded);
+      if (
+        actual.length !== expected.length ||
+        actual.toString('base64url') !== signature ||
+        !timingSafeEqual(actual, expected)
+      )
+        throw new Error();
+      const bytes = Buffer.from(encoded, 'base64url');
+      if (bytes.toString('base64url') !== encoded) throw new Error();
       const payload: unknown = JSON.parse(bytes.toString('utf8'));
       if (!Array.isArray(payload) || payload.length !== 3 || payload[0] !== 1 || payload[1] !== this.fingerprint) {
         throw new Error();
@@ -37,6 +51,10 @@ export class CursorToken {
     } catch {
       throw new BadRequestException('Invalid nextToken or changed query filters');
     }
+  }
+
+  private sign(payload: string): Buffer {
+    return createHmac('sha256', this.secret).update(payload).digest();
   }
 
   private canonical(value: unknown): unknown {

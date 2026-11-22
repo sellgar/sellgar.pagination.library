@@ -15,12 +15,14 @@
   },
   "peerDependencies": {
     "@nestjs/common": "^12.0.0",
+    "@nestjs/config": "^12.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "typeorm": "^1.0.0"
   },
   "devDependencies": {
     "@nestjs/common": "12.2.0",
+    "@nestjs/config": "12.0.1",
     "@types/node": "26.6.5",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
@@ -30,5 +32,10 @@
     "typeorm": "1.1.2",
     "typescript": "6.0.3"
   },
-  "packageManager": "yarn@4.18.0"
+  "packageManager": "yarn@4.18.0",
+  "peerDependenciesMeta": {
+    "typeorm": {
+      "optional": true
+    }
+  }
 }

@@ -4,3 +4,4 @@ export { CursorQueryDto } from './cursor-query.dto';
 export { CursorMetaEntity } from './cursor-meta.entity';
 export type { CursorPage } from './cursor-page';
 export type { CursorOrder } from './cursor-order';
+export { PaginationModule } from './pagination.module';

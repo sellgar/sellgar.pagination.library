@@ -6,7 +6,11 @@ import { CursorPage } from './cursor-page';
 import { CursorToken } from './cursor-token';
 
 export class CursorPagination {
-  static async read<T extends ObjectLiteral>(
+  constructor(private readonly secret: string) {
+    new CursorToken('configuration-check', {}, [], secret);
+  }
+
+  async read<T extends ObjectLiteral>(
     query: SelectQueryBuilder<T>,
     request: { limit?: number; nextToken?: string; offset?: unknown },
     context: { scope: string; filters: unknown; order: readonly CursorOrder[] },
@@ -24,7 +28,7 @@ export class CursorPagination {
     if (context.order.at(-1)?.expression !== identity) {
       throw new Error('The final cursor order must be the primary key');
     }
-    const token = new CursorToken(context.scope, context.filters, context.order);
+    const token = new CursorToken(context.scope, context.filters, context.order, this.secret);
     const headers = query.clone().select(identity, '__page_id').orderBy().distinct(true);
     context.order.forEach((key, index) => {
       headers.addSelect(key.expression, `__page_order_${index}`);
