@@ -49,11 +49,17 @@ test(
         },
       },
     });
+    const numbered = new EntitySchema({
+      name: 'PageNumber',
+      tableName: 'page_number',
+      schema,
+      columns: { id: { type: 'integer', primary: true } },
+    });
     const source = new DataSource({
       type: 'postgres',
       url: process.env.PAGINATION_TEST_DATABASE_URL,
       schema,
-      entities: [parent, child],
+      entities: [parent, child, numbered],
       synchronize: false,
       logger: {
         logQuery: (sql) => queries.push(sql),
@@ -73,6 +79,20 @@ test(
       );
       await source.query(
         `CREATE TABLE "${schema}".page_child (uuid uuid PRIMARY KEY, parent_uuid uuid NOT NULL REFERENCES "${schema}".page_parent(uuid) ON DELETE CASCADE)`,
+      );
+      await source.query(`CREATE TABLE "${schema}".page_number (id integer PRIMARY KEY)`);
+      await source.query(`INSERT INTO "${schema}".page_number VALUES (1),(2),(3)`);
+      const integerOrder = {
+        scope: 'test.integers',
+        filters: {},
+        order: [{ expression: 'number.id', direction: 'ASC', type: 'integer' }],
+      };
+      const integers = () => source.getRepository(numbered).createQueryBuilder('number');
+      const integerFirst = await pagination.read(integers(), { limit: 2 }, integerOrder);
+      const integerLast = await pagination.read(integers(), { nextToken: integerFirst.meta.nextToken }, integerOrder);
+      assert.deepEqual(
+        [...integerFirst.items, ...integerLast.items].map((row) => row.id),
+        [1, 2, 3],
       );
       const group = randomUUID();
       const ids = Array.from(
@@ -113,8 +133,8 @@ test(
       do {
         const page = await pagination.read(build(), { limit: 2, nextToken }, context);
         assert.deepEqual(Object.keys(page.meta).sort(), ['limit', 'nextToken']);
-        assert.ok(page.data.every((row) => row.children.length === 3));
-        seen.push(...page.data.map((row) => row.uuid));
+        assert.ok(page.items.every((row) => row.children.length === 3));
+        seen.push(...page.items.map((row) => row.uuid));
         nextToken = page.meta.nextToken;
       } while (nextToken !== null);
       assert.deepEqual(seen, ids);
@@ -125,7 +145,7 @@ test(
       await source.query(`INSERT INTO "${schema}".page_parent VALUES ($1,$2,'2027-01-01',1)`, [randomUUID(), group]);
       const rest = await pagination.read(build(), { limit: 100, nextToken: first.meta.nextToken }, context);
       assert.deepEqual(
-        rest.data.map((row) => row.uuid),
+        rest.items.map((row) => row.uuid),
         ids.slice(2),
       );
       assert.equal(rest.meta.nextToken, null);
@@ -135,7 +155,7 @@ test(
         { ...context, filters: { missing: true } },
       );
       assert.deepEqual(empty, {
-        data: [],
+        items: [],
         meta: { limit: 50, nextToken: null },
       });
       const ranked = {
@@ -145,15 +165,16 @@ test(
       };
       const rankFirst = await pagination.read(build(), { limit: 2 }, ranked);
       const rankRest = await pagination.read(build(), { limit: 100, nextToken: rankFirst.meta.nextToken }, ranked);
-      assert.equal(new Set([...rankFirst.data, ...rankRest.data].map((row) => row.uuid)).size, 5);
+      assert.equal(new Set([...rankFirst.items, ...rankRest.items].map((row) => row.uuid)).size, 5);
       await assert.rejects(
-        pagination.read(build(), {}, {
-          ...context,
-          order: [
-            { expression: 'CAST(NULL AS timestamp)', direction: 'ASC', type: 'timestamp' },
-            context.order[1],
-          ],
-        }),
+        pagination.read(
+          build(),
+          {},
+          {
+            ...context,
+            order: [{ expression: 'CAST(NULL AS timestamp)', direction: 'ASC', type: 'timestamp' }, context.order[1]],
+          },
+        ),
         /non-null/,
       );
       await assert.rejects(

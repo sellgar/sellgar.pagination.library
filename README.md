@@ -3,7 +3,7 @@
 Общая курсорная пагинация Sellgar backend. Node 24+, PostgreSQL, TypeORM 1.x.
 
 Запрос: `{ limit?: number, nextToken?: string, ...filters }`; default 50, maximum 100.
-Ответ: `{ data: T[], meta: { limit, nextToken: string | null } }`.
+Ответ: `{ items: T[], meta: { limit, nextToken: string | null } }`.
 COUNT не выполняется. Подсчёт количества не входит в списочный контракт или
 в библиотеку; отдельные read models для него будут проектироваться независимо.
 Отсутствие продолжения обозначается только `nextToken: null`.

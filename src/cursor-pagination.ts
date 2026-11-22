@@ -78,7 +78,7 @@ export class CursorPagination {
       throw new Error('Cursor order keys must be non-null');
     }
     const page = rows.slice(0, limit);
-    const ids = page.map((row) => row.__page_id);
+    const ids = page.map((row) => String(row.__page_id));
     const entities =
       ids.length === 0
         ? []
@@ -86,7 +86,7 @@ export class CursorPagination {
     const byId = new Map(entities.map((item) => [String(item[primaryColumns[0].propertyName]), item]));
     const last = page.at(-1);
     return {
-      data: ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
+      items: ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
       meta: {
         limit,
         nextToken:

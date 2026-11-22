@@ -1,6 +1,6 @@
 import { CursorMetaEntity } from './cursor-meta.entity';
 
 export interface CursorPage<T> {
-  data: T[];
+  items: T[];
   meta: CursorMetaEntity;
 }
