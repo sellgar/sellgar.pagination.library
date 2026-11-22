@@ -147,6 +147,16 @@ test(
       const rankRest = await pagination.read(build(), { limit: 100, nextToken: rankFirst.meta.nextToken }, ranked);
       assert.equal(new Set([...rankFirst.data, ...rankRest.data].map((row) => row.uuid)).size, 5);
       await assert.rejects(
+        pagination.read(build(), {}, {
+          ...context,
+          order: [
+            { expression: 'CAST(NULL AS timestamp)', direction: 'ASC', type: 'timestamp' },
+            context.order[1],
+          ],
+        }),
+        /non-null/,
+      );
+      await assert.rejects(
         pagination.read(build(), { nextToken: first.meta.nextToken }, { ...context, filters: { group: randomUUID() } }),
         (error) => error.getStatus() === 400,
       );

@@ -15,7 +15,7 @@ export class CursorPagination {
     request: { limit?: number; nextToken?: string; offset?: unknown },
     context: { scope: string; filters: unknown; order: readonly CursorOrder[] },
   ): Promise<CursorPage<T>> {
-    const limit = request.limit ?? 50;
+    const limit = request.limit === undefined ? 50 : request.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || request.offset !== undefined) {
       throw new BadRequestException('Use limit between 1 and 100 and nextToken; offset is not supported');
     }
@@ -74,6 +74,9 @@ export class CursorPagination {
       }
     }
     const rows = await roots.limit(limit + 1).getRawMany<Record<string, string>>();
+    if (rows.some((row) => context.order.some((_key, index) => typeof row[`__page_key_${index}`] !== 'string'))) {
+      throw new Error('Cursor order keys must be non-null');
+    }
     const page = rows.slice(0, limit);
     const ids = page.map((row) => row.__page_id);
     const entities =
